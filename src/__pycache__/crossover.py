@@ -54,11 +54,58 @@ def backtest_strategy(ticker="^NSEI", period="3d", interval="5m", output_file="s
         ((df['Low'] >= df['R4']) & (df['High'] <= df['R5']))
     )
 
-    # Generate signals
+    
+    # Find hammers
+    df['Body'] = abs(df['Close'] - df['Open'])
+    df['Lower_Wick'] = df[['Open', 'Close']].min(axis=1) - df['Low']
+    df['Upper_Wick'] = df['High'] - df[['Open', 'Close']].max(axis=1)
+    df['is_hammer'] = ((df['Lower_Wick'] >= 7 ) & (df['Upper_Wick'] <= 5) & (df['is_bearish'] == True))
+    '''
+        # Initialize signals
     df['Signal'] = 0
-    df.loc[df['is_bullish'] & df['candle_between_levels'], 'Signal'] = 1
-    df.loc[df['is_bearish'] & df['candle_between_levels'], 'Signal'] = -1
+    block_signal = None
+    for idx in df.index[2:]:
+        close = df.at[idx, 'Close']
+        ema9 = df.at[idx, 'EMA9']
 
+        if block_signal == "bearish" and close > ema9:
+            block_signal = None
+        if block_signal == "bullish" and close < ema9:
+            block_signal = None
+
+        if block_signal is None:
+            if df.at[idx, 'is_bullish'] and df.at[idx, 'candle_between_levels']:
+                df.at[idx, 'Signal'] = 1
+                block_signal = "bullish"
+            elif df.at[idx, 'is_bearish'] and df.at[idx, 'candle_between_levels'] and not df.at[idx, 'is_hammer']:
+                df.at[idx, 'Signal'] = -1
+                block_signal = "bearish"
+'''
+# Initialize signals
+    df['Signal'] = 0
+    block_signal = None
+    for idx in df.index[2:]:
+        close = df.at[idx, 'Close']
+        ema9 = df.at[idx, 'EMA9']
+
+        if block_signal == "bearish" and close > ema9:
+            block_signal = None
+        elif block_signal == "bullish" and close < ema9:
+            block_signal = None
+
+        if block_signal is None and df.at[idx, 'candle_between_levels'].item():
+            if df.at[idx, 'is_bullish']:
+                df.at[idx, 'Signal'] = 1
+                block_signal = "bullish"
+            elif df.at[idx, 'is_bearish'] and not df.at[idx, 'is_hammer']:
+                df.at[idx, 'Signal'] = -1
+                block_signal = "bearish"
+    # Generate signals
+    #df['Signal'] = 0
+    #df.loc[df['is_bullish'] & df['candle_between_levels'], 'Signal'] = 1
+    #df.loc[(df['is_bearish']) & (df['candle_between_levels']) & (~df['is_hammer']), 'Signal'] = -1
+
+    
     # Strategy returns
     df['Return'] = df['Close'].pct_change()
     df['Strategy_Return'] = df['Return'] * df['Signal'].shift(1)
@@ -102,7 +149,7 @@ def intraday(ticker="^NSEI", period="1mo", interval="1d", output_file="data.xlsx
     df_data.columns = ['Open', 'High', 'Low', 'Close']
     
     df_data.index = pd.to_datetime(df_data.index.tz_convert('Asia/Kolkata'))
-    df_data.index = pd.to_datetime(df_data.index).tz_localize(None)
+    df_data.index = df_data.index.tz_localize(None)  # remove timezone
     
     # Store the full timestamp in a column
     df_data['Timestamp'] = df_data.index
@@ -132,6 +179,8 @@ def intraday(ticker="^NSEI", period="1mo", interval="1d", output_file="data.xlsx
     df_data['R3'] = df_data.index.map(prev_by_date['R3'])
     df_data['R4'] = df_data.index.map(prev_by_date['R4'])
     df_data['R5'] = df_data.index.map(prev_by_date['R5'])
+
+    #df_data = find_hammers(df_data)
     #df_data = calculate_pivots(df_data)
 
     # Reorder columns
@@ -147,6 +196,26 @@ def intraday(ticker="^NSEI", period="1mo", interval="1d", output_file="data.xlsx
     
     return df_data
 
+def calutlate_profit_and_stoploss(df):
+    if (is_bullish and candle_between_levels):
+        entry_price = df['Close']
+        take_profit = entry_price + df['Low'].shift(1) 
+        stoploss = entry_price - df['Low'].shift(1)
+        return take_profit, stoploss
+    
+    elif (is_bearish and candle_between_levels):
+        entry_price = df['Close']
+        take_profit = entry_price - df['High'].shift(1) 
+        stoploss = entry_price + df['High'].shift(1)
+        return take_profit, stoploss
+
+def find_hammers(df):
+    df['Body'] = abs(df['Close'] - df['Open'])
+    df['Lower_Wick'] = df[['Open', 'Close']].min(axis=1) - df['Low']
+    df['Upper_Wick'] = df['High'] - df[['Open', 'Close']].max(axis=1)
+    #df['is_hammer'] = ((df['Lower_Wick'] >= 7 ) & (df['Upper_Wick'] <= 3) & (isbearish))
+    return df
+'''
 # ---------------- Run Backtest ----------------
 if __name__ == "__main__":
     print("\n" + "="*60)
@@ -164,6 +233,7 @@ if __name__ == "__main__":
         period= period, 
         interval=interval, 
         output_file="NSEI_quick_test.xlsx")
-   #backtest_strategy("^NSEI", period="1mo", interval="5m", output_file="NSEI_strategy.xlsx")
+    '''
+backtest_strategy("^NSEI", period="2d", interval="5m", output_file="NSEI_strategy.xlsx")
    #get_prev_data("^NSEI", period="10d", interval="1d", output_file="NSEI_prev_data.xlsx")
-    #intraday("^NSEI", period="3d", interval="5m", output_file="NSEI_intraday_data.xlsx")
+#intraday("^NSEI", period="1d", interval="5m", output_file="NSEI_intraday_data.xlsx")
